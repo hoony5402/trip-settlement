@@ -1,1 +1,1 @@
-Update API URL
+Fix: Add newPayer to useEffect dependency array

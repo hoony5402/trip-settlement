@@ -37,7 +37,7 @@ function App() {
             const initialShares = participants.reduce((acc, p) => ({ ...acc, [p]: 1 }), {});
             setNewShares(initialShares);
         }
-    }, [participants]);
+    }, [participants, newPayer]);
 
     const fetchExpenses = () => {
         fetch(`${API_URL}/expenses`).then(res => res.json()).then(data => setExpenses(data)).catch(err => console.error("Failed to fetch expenses:", err));
