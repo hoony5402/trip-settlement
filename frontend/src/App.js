@@ -242,17 +242,35 @@ function App() {
                         <h2>정산 현황</h2>
                         <button onClick={handleSettlement} className="settle-button">정산 결과 보기</button>
                         <h3>확정된 비용</h3>
-                        {expenses.map(e => (
-                            <div key={e.id} className="expense-item">
-                                <span>{e.item}: {e.amountKRW.toLocaleString()}원 (결제: {e.payer})</span>
-                                {isAdmin && (
-                                    <div className="expense-actions">
-                                        <button className="edit" onClick={() => handleEditShares(e)}>비중 수정</button>
-                                        <button className="delete" onClick={() => handleDeleteExpense(e.id)}>삭제</button>
-                                    </div>
-                                )}
-                            </div>
-                        ))}
+                        <table className="expenses-table">
+                            <thead>
+                                <tr>
+                                    <th>항목</th>
+                                    <th>금액 (KRW)</th>
+                                    <th>결제자</th>
+                                    {participants.map(p => <th key={p}>{p} 비중</th>)}
+                                    {isAdmin && <th>관리</th>}
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {expenses.map(e => (
+                                    <tr key={e.id}>
+                                        <td>{e.item}</td>
+                                        <td>{e.amountKRW.toLocaleString()}</td>
+                                        <td>{e.payer}</td>
+                                        {participants.map(p => (
+                                            <td key={p}>{e.shares[p] !== undefined ? e.shares[p] : '-'}</td>
+                                        ))}
+                                        {isAdmin && (
+                                            <td>
+                                                <button className="edit" onClick={() => handleEditShares(e)}>비중 수정</button>
+                                                <button className="delete" onClick={() => handleDeleteExpense(e.id)}>삭제</button>
+                                            </td>
+                                        )}
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
 
                         {editingExpenseId && (
                             <div className="edit-shares-form">

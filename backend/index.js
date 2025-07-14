@@ -1,4 +1,3 @@
-
 const express = require('express');
 const cors = require('cors');
 const fs = require('fs');
@@ -15,13 +14,37 @@ const dbPath = path.join(__dirname, 'db.json');
 const ADMIN_PASSWORD = 'psel'; // 관리자 비밀번호 (보안에 취약하니 실제 서비스에서는 환경 변수 사용 권장)
 
 const readDb = () => {
-    const dbData = fs.readFileSync(dbPath);
-    return JSON.parse(dbData);
+    try {
+        const dbData = fs.readFileSync(dbPath);
+        const data = JSON.parse(dbData);
+        // Ensure all top-level properties exist
+        data.participants = data.participants || [];
+        data.expenses = data.expenses || [];
+        data.pendingExpenses = data.pendingExpenses || [];
+        return data;
+    } catch (error) {
+        console.error("Error reading or parsing db.json:", error);
+        // If file doesn't exist or is invalid, return initial structure
+        return {
+            participants: [],
+            expenses: [],
+            pendingExpenses: []
+        };
+    }
 };
 
 const writeDb = (data) => {
     fs.writeFileSync(dbPath, JSON.stringify(data, null, 2));
 };
+
+// Initialize db.json if it doesn't exist or is empty/invalid
+if (!fs.existsSync(dbPath) || Object.keys(readDb()).length === 0) {
+    writeDb({
+        participants: [],
+        expenses: [],
+        pendingExpenses: []
+    });
+}
 
 // 관리자 권한 확인 미들웨어
 const checkAdmin = (req, res, next) => {
@@ -111,6 +134,7 @@ app.delete('/api/expenses/reject/:id', checkAdmin, (req, res) => {
 app.put('/api/expenses/:id/shares', checkAdmin, (req, res) => {
     const { id } = req.params;
     const { shares } = req.body;
+    console.log(`Updating shares for expense ${id}:`, shares); // 디버깅 로그 추가
     const db = readDb();
     const expenseIndex = db.expenses.findIndex(e => e.id === parseInt(id));
 
@@ -124,62 +148,6 @@ app.put('/api/expenses/:id/shares', checkAdmin, (req, res) => {
     db.expenses[expenseIndex].shares = shares;
     writeDb(db);
     res.status(200).send(db.expenses[expenseIndex]);
-});
-
-// 정산 결과 계산
-app.get('/api/settlement', (req, res) => {
-    const db = readDb();
-    const { participants, expenses } = db;
-    if (participants.length === 0) {
-        return res.status(200).send({ balances: {}, transactions: [], totalSpent: 0 });
-    }
-
-    const totalSpent = expenses.reduce((acc, e) => acc + e.amountKRW, 0);
-    let balances = participants.reduce((acc, p) => ({ ...acc, [p]: 0 }), {});
-
-    expenses.forEach(expense => {
-        balances[expense.payer] += expense.amountKRW;
-        const totalShares = Object.values(expense.shares).reduce((acc, val) => acc + val, 0);
-        if (totalShares > 0) {
-            for (const participant in expense.shares) {
-                const share = expense.shares[participant];
-                const cost = (expense.amountKRW * share) / totalShares;
-                balances[participant] -= cost;
-            }
-        }
-    });
-
-    const debtors = [];
-    const creditors = [];
-
-    for (const person in balances) {
-        if (balances[person] > 0) {
-            creditors.push({ person, amount: balances[person] });
-        } else if (balances[person] < 0) {
-            debtors.push({ person, amount: -balances[person] });
-        }
-    }
-
-    creditors.sort((a, b) => b.amount - a.amount);
-    debtors.sort((a, b) => b.amount - a.amount);
-
-    const transactions = [];
-    let i = 0, j = 0;
-    while (i < creditors.length && j < debtors.length) {
-        const creditor = creditors[i];
-        const debtor = debtors[j];
-        const amount = Math.min(creditor.amount, debtor.amount);
-
-        transactions.push({ from: debtor.person, to: creditor.person, amount });
-
-        creditor.amount -= amount;
-        debtor.amount -= amount;
-
-        if (creditor.amount === 0) i++;
-        if (debtor.amount === 0) j++;
-    }
-
-    res.status(200).send({ balances, transactions, totalSpent });
 });
 
 // 비용 삭제 (관리자 전용)

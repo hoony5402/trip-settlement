@@ -1,1 +1,1 @@
-Feature: Implement admin roles, expense editing, and share adjustments
+Feature: Display expenses in a table and fix share saving issue
