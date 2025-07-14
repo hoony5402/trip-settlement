@@ -1,1 +1,1 @@
-Fix: Add newPayer to useEffect dependency array
+Feature: Implement admin roles, expense editing, and share adjustments

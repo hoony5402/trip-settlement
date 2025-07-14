@@ -2,31 +2,43 @@ import React, { useState, useEffect } from 'react';
 import './App.css';
 
 const API_URL = 'https://trip-settlement.onrender.com/api';
+const ADMIN_PASSWORD = 'psel'; // 관리자 비밀번호
 
 function App() {
-    // State declarations
+    const [isAuthenticated, setIsAuthenticated] = useState(false);
+    const [password, setPassword] = useState('');
+    const [isAdmin, setIsAdmin] = useState(false); // 관리자 여부 상태
+
     const [participants, setParticipants] = useState([]);
     const [newParticipant, setNewParticipant] = useState('');
     const [expenses, setExpenses] = useState([]);
     const [pendingExpenses, setPendingExpenses] = useState([]);
     const [settlement, setSettlement] = useState(null);
+
     const [newItem, setNewItem] = useState('');
     const [newAmount, setNewAmount] = useState('');
     const [newPayer, setNewPayer] = useState('');
     const [newShares, setNewShares] = useState({});
 
+    const [editingExpenseId, setEditingExpenseId] = useState(null);
+    const [editingShares, setEditingShares] = useState({});
+
     // Fetch initial participants
     useEffect(() => {
-        fetch(`${API_URL}/participants`)
-            .then(res => res.json())
-            .then(data => setParticipants(data))
-            .catch(err => console.error("Failed to fetch participants:", err));
-    }, []);
+        if (isAuthenticated) {
+            fetch(`${API_URL}/participants`)
+                .then(res => res.json())
+                .then(data => setParticipants(data))
+                .catch(err => console.error("Failed to fetch participants:", err));
+        }
+    }, [isAuthenticated]);
 
     // Fetch expenses whenever participants change
     useEffect(() => {
-        fetchExpenses();
-    }, [participants]);
+        if (isAuthenticated) {
+            fetchExpenses();
+        }
+    }, [isAuthenticated, participants]);
 
     // Update default payer and shares when participants change
     useEffect(() => {
@@ -44,12 +56,28 @@ function App() {
         fetch(`${API_URL}/expenses/pending`).then(res => res.json()).then(data => setPendingExpenses(data)).catch(err => console.error("Failed to fetch pending expenses:", err));
     };
 
+    const handleLogin = () => {
+        if (password === ADMIN_PASSWORD) {
+            setIsAuthenticated(true);
+            setIsAdmin(true); // 비밀번호가 맞으면 관리자 권한 부여
+        } else if (password === '') { // 일반 사용자 접속 (비밀번호 없이)
+            setIsAuthenticated(true);
+            setIsAdmin(false);
+        } else {
+            alert('잘못된 비밀번호입니다.');
+            setPassword('');
+        }
+    };
+
     const handleAddParticipant = () => {
         if (newParticipant && !participants.includes(newParticipant)) {
             const updatedParticipants = [...participants, newParticipant];
             fetch(`${API_URL}/participants`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'x-admin-password': ADMIN_PASSWORD
+                },
                 body: JSON.stringify({ participants: updatedParticipants })
             })
             .then(res => res.json())
@@ -81,13 +109,57 @@ function App() {
     };
 
     const handleApprove = (id) => {
-        fetch(`${API_URL}/expenses/approve/${id}`, { method: 'POST' })
+        fetch(`${API_URL}/expenses/approve/${id}`, {
+            method: 'POST',
+            headers: { 'x-admin-password': ADMIN_PASSWORD }
+        })
             .then(() => fetchExpenses());
     };
 
     const handleReject = (id) => {
-        fetch(`${API_URL}/expenses/reject/${id}`, { method: 'DELETE' })
+        fetch(`${API_URL}/expenses/reject/${id}`, {
+            method: 'DELETE',
+            headers: { 'x-admin-password': ADMIN_PASSWORD }
+        })
             .then(() => fetchExpenses());
+    };
+
+    const handleDeleteExpense = (id) => {
+        if (window.confirm('정말 이 비용 항목을 삭제하시겠습니까?')) {
+            fetch(`${API_URL}/expenses/${id}`, {
+                method: 'DELETE',
+                headers: { 'x-admin-password': ADMIN_PASSWORD }
+            })
+            .then(() => fetchExpenses());
+        }
+    };
+
+    const handleEditShares = (expense) => {
+        setEditingExpenseId(expense.id);
+        setEditingShares({ ...expense.shares });
+    };
+
+    const handleUpdateShares = (id) => {
+        fetch(`${API_URL}/expenses/${id}/shares`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                'x-admin-password': ADMIN_PASSWORD
+            },
+            body: JSON.stringify({ shares: editingShares })
+        })
+        .then(() => {
+            setEditingExpenseId(null);
+            setEditingShares({});
+            fetchExpenses();
+        });
+    };
+
+    const handleShareChange = (participantName, value) => {
+        setEditingShares(prevShares => ({
+            ...prevShares,
+            [participantName]: parseFloat(value) || 0
+        }));
     };
 
     const handleSettlement = () => {
@@ -96,20 +168,42 @@ function App() {
             .then(data => setSettlement(data));
     };
 
+    if (!isAuthenticated) {
+        return (
+            <div className="App">
+                <h1>여행 경비 정산</h1>
+                <div className="container">
+                    <h2>접근 비밀번호 입력</h2>
+                    <input 
+                        type="password" 
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        placeholder="비밀번호 입력 (관리자는 'psel', 일반 참가자는 비워두세요)"
+                    />
+                    <button onClick={handleLogin}>접속</button>
+                </div>
+            </div>
+        );
+    }
+
     return (
         <div className="App">
             <h1>여행 경비 정산</h1>
             <div className="container">
                 <h2>참가자 설정</h2>
-                <div className="participant-input">
-                    <input 
-                        type="text" 
-                        value={newParticipant}
-                        onChange={(e) => setNewParticipant(e.target.value)}
-                        placeholder="참가자 이름 입력"
-                    />
-                    <button onClick={handleAddParticipant}>추가</button>
-                </div>
+                {isAdmin ? (
+                    <div className="participant-input">
+                        <input 
+                            type="text" 
+                            value={newParticipant}
+                            onChange={(e) => setNewParticipant(e.target.value)}
+                            placeholder="참가자 이름 입력"
+                        />
+                        <button onClick={handleAddParticipant}>추가</button>
+                    </div>
+                ) : (
+                    <p>참가자 설정은 관리자만 가능합니다.</p>
+                )}
                 <div className="participants">
                     {participants.map(p => <span key={p} className="participant">{p}</span>)}
                 </div>
@@ -129,18 +223,20 @@ function App() {
                         </div>
                     </div>
 
-                    <div className="container">
-                        <h2>승인 대기중인 항목</h2>
-                        {pendingExpenses.map(e => (
-                            <div key={e.id} className="expense-item pending">
-                                <span>{e.item}: {e.amountKRW.toLocaleString()}원 (결제: {e.payer})</span>
-                                <div>
-                                    <button className="approve" onClick={() => handleApprove(e.id)}>승인</button>
-                                    <button className="reject" onClick={() => handleReject(e.id)}>거절</button>
+                    {isAdmin && (
+                        <div className="container">
+                            <h2>승인 대기중인 항목 (관리자 전용)</h2>
+                            {pendingExpenses.map(e => (
+                                <div key={e.id} className="expense-item pending">
+                                    <span>{e.item}: {e.amountKRW.toLocaleString()}원 (결제: {e.payer})</span>
+                                    <div>
+                                        <button className="approve" onClick={() => handleApprove(e.id)}>승인</button>
+                                        <button className="reject" onClick={() => handleReject(e.id)}>거절</button>
+                                    </div>
                                 </div>
-                            </div>
-                        ))}
-                    </div>
+                            ))}
+                        </div>
+                    )}
 
                     <div className="container">
                         <h2>정산 현황</h2>
@@ -149,8 +245,34 @@ function App() {
                         {expenses.map(e => (
                             <div key={e.id} className="expense-item">
                                 <span>{e.item}: {e.amountKRW.toLocaleString()}원 (결제: {e.payer})</span>
+                                {isAdmin && (
+                                    <div className="expense-actions">
+                                        <button className="edit" onClick={() => handleEditShares(e)}>비중 수정</button>
+                                        <button className="delete" onClick={() => handleDeleteExpense(e.id)}>삭제</button>
+                                    </div>
+                                )}
                             </div>
                         ))}
+
+                        {editingExpenseId && (
+                            <div className="edit-shares-form">
+                                <h4>비용 부담 비중 수정</h4>
+                                {participants.map(p => (
+                                    <div key={p}>
+                                        <label>{p}: </label>
+                                        <input 
+                                            type="number" 
+                                            step="0.1" 
+                                            value={editingShares[p] || 0}
+                                            onChange={(e) => handleShareChange(p, e.target.value)}
+                                        />
+                                    </div>
+                                ))}
+                                <button onClick={() => handleUpdateShares(editingExpenseId)}>저장</button>
+                                <button onClick={() => setEditingExpenseId(null)}>취소</button>
+                            </div>
+                        )}
+
                         {settlement && (
                             <div className="settlement-result">
                                 <h3>최종 정산 결과</h3>

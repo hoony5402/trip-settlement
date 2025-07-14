@@ -1,3 +1,4 @@
+
 const express = require('express');
 const cors = require('cors');
 const fs = require('fs');
@@ -11,6 +12,8 @@ app.use(express.json());
 
 const dbPath = path.join(__dirname, 'db.json');
 
+const ADMIN_PASSWORD = 'psel'; // 관리자 비밀번호 (보안에 취약하니 실제 서비스에서는 환경 변수 사용 권장)
+
 const readDb = () => {
     const dbData = fs.readFileSync(dbPath);
     return JSON.parse(dbData);
@@ -20,8 +23,18 @@ const writeDb = (data) => {
     fs.writeFileSync(dbPath, JSON.stringify(data, null, 2));
 };
 
-// 참가자 설정
-app.post('/api/participants', (req, res) => {
+// 관리자 권한 확인 미들웨어
+const checkAdmin = (req, res, next) => {
+    const adminPassword = req.headers['x-admin-password'];
+    if (adminPassword === ADMIN_PASSWORD) {
+        next();
+    } else {
+        res.status(403).send('관리자 권한이 없습니다.');
+    }
+};
+
+// 참가자 설정 (관리자 전용)
+app.post('/api/participants', checkAdmin, (req, res) => {
     const { participants } = req.body;
     if (!participants || !Array.isArray(participants)) {
         return res.status(400).send('Invalid participants data');
@@ -35,16 +48,6 @@ app.post('/api/participants', (req, res) => {
 app.get('/api/participants', (req, res) => {
     const db = readDb();
     res.status(200).send(db.participants);
-});
-
-app.get('/api/expenses/pending', (req, res) => {
-    const db = readDb();
-    res.status(200).send(db.pendingExpenses);
-});
-
-app.get('/api/expenses', (req, res) => {
-    const db = readDb();
-    res.status(200).send(db.expenses);
 });
 
 // 비용 제출 (승인 대기)
@@ -66,8 +69,18 @@ app.post('/api/expenses/pending', (req, res) => {
     res.status(201).send(newPendingExpense);
 });
 
-// 관리자 승인
-app.post('/api/expenses/approve/:id', (req, res) => {
+app.get('/api/expenses/pending', (req, res) => {
+    const db = readDb();
+    res.status(200).send(db.pendingExpenses);
+});
+
+app.get('/api/expenses', (req, res) => {
+    const db = readDb();
+    res.status(200).send(db.expenses);
+});
+
+// 관리자 승인 (관리자 전용)
+app.post('/api/expenses/approve/:id', checkAdmin, (req, res) => {
     const { id } = req.params;
     const db = readDb();
     const expenseToApprove = db.pendingExpenses.find(e => e.id === parseInt(id));
@@ -81,8 +94,8 @@ app.post('/api/expenses/approve/:id', (req, res) => {
     res.status(200).send(expenseToApprove);
 });
 
-// 관리자 거절
-app.delete('/api/expenses/reject/:id', (req, res) => {
+// 관리자 거절 (관리자 전용)
+app.delete('/api/expenses/reject/:id', checkAdmin, (req, res) => {
     const { id } = req.params;
     const db = readDb();
     const initialLength = db.pendingExpenses.length;
@@ -92,6 +105,25 @@ app.delete('/api/expenses/reject/:id', (req, res) => {
     }
     writeDb(db);
     res.status(204).send();
+});
+
+// 비용 부담 비중 수정 (관리자 전용)
+app.put('/api/expenses/:id/shares', checkAdmin, (req, res) => {
+    const { id } = req.params;
+    const { shares } = req.body;
+    const db = readDb();
+    const expenseIndex = db.expenses.findIndex(e => e.id === parseInt(id));
+
+    if (expenseIndex === -1) {
+        return res.status(404).send('Expense not found');
+    }
+    if (!shares || typeof shares !== 'object') {
+        return res.status(400).send('Invalid shares data');
+    }
+
+    db.expenses[expenseIndex].shares = shares;
+    writeDb(db);
+    res.status(200).send(db.expenses[expenseIndex]);
 });
 
 // 정산 결과 계산
@@ -150,10 +182,19 @@ app.get('/api/settlement', (req, res) => {
     res.status(200).send({ balances, transactions, totalSpent });
 });
 
-app.get('/', (req, res) => {
-    res.send('Trip Settlement Backend is running!');
+// 비용 삭제 (관리자 전용)
+app.delete('/api/expenses/:id', checkAdmin, (req, res) => {
+    const { id } = req.params;
+    const db = readDb();
+    const initialLength = db.expenses.length;
+    db.expenses = db.expenses.filter(e => e.id !== parseInt(id));
+    if (db.expenses.length === initialLength) {
+        return res.status(404).send('Expense not found');
+    }
+    writeDb(db);
+    res.status(204).send();
 });
 
-app.listen(PORT, () => {
-    console.log(`Server is running on http://localhost:${PORT}`);
+app.get('/', (req, res) => {
+    res.send('Trip Settlement Backend is running!');
 });
