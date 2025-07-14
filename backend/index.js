@@ -167,6 +167,62 @@ app.put('/api/expenses/:id/shares', checkAdmin, (req, res) => {
     res.status(200).send(db.expenses[expenseIndex]);
 });
 
+// 정산 결과 계산
+app.get('/api/settlement', (req, res) => {
+    const db = readDb();
+    const { participants, expenses } = db;
+    if (participants.length === 0) {
+        return res.status(200).send({ balances: {}, transactions: [], totalSpent: 0 });
+    }
+
+    const totalSpent = expenses.reduce((acc, e) => acc + e.amountKRW, 0);
+    let balances = participants.reduce((acc, p) => ({ ...acc, [p]: 0 }), {});
+
+    expenses.forEach(expense => {
+        balances[expense.payer] += expense.amountKRW;
+        const totalShares = Object.values(expense.shares).reduce((acc, val) => acc + val, 0);
+        if (totalShares > 0) {
+            for (const participant in expense.shares) {
+                const share = expense.shares[participant];
+                const cost = (expense.amountKRW * share) / totalShares;
+                balances[participant] -= cost;
+            }
+        }
+    });
+
+    const debtors = [];
+    const creditors = [];
+
+    for (const person in balances) {
+        if (balances[person] > 0) {
+            creditors.push({ person, amount: balances[person] });
+        } else if (balances[person] < 0) {
+            debtors.push({ person, amount: -balances[person] });
+        }
+    }
+
+    creditors.sort((a, b) => b.amount - a.amount);
+    debtors.sort((a, b) => b.amount - a.amount);
+
+    const transactions = [];
+    let i = 0, j = 0;
+    while (i < creditors.length && j < debtors.length) {
+        const creditor = creditors[i];
+        const debtor = debtors[j];
+        const amount = Math.min(creditor.amount, debtor.amount);
+
+        transactions.push({ from: debtor.person, to: creditor.person, amount });
+
+        creditor.amount -= amount;
+        debtor.amount -= amount;
+
+        if (creditor.amount === 0) i++;
+        if (debtor.amount === 0) j++;
+    }
+
+    res.status(200).send({ balances, transactions, totalSpent });
+});
+
 // 비용 삭제 (관리자 전용)
 app.delete('/api/expenses/:id', checkAdmin, (req, res) => {
     const { id } = req.params;
