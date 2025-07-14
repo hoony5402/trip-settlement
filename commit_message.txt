@@ -1,1 +1,1 @@
-Feature: Display expenses in a table and fix share saving issue
+Feature: Update login passwords and fix share saving issue

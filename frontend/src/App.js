@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import './App.css';
 
 const API_URL = 'https://trip-settlement.onrender.com/api';
-const ADMIN_PASSWORD = 'psel'; // 관리자 비밀번호
+const ADMIN_PASSWORD = '0865'; // 관리자 비밀번호
+const USER_PASSWORD = 'psel'; // 일반 사용자 비밀번호
 
 function App() {
     const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -60,7 +61,7 @@ function App() {
         if (password === ADMIN_PASSWORD) {
             setIsAuthenticated(true);
             setIsAdmin(true); // 비밀번호가 맞으면 관리자 권한 부여
-        } else if (password === '') { // 일반 사용자 접속 (비밀번호 없이)
+        } else if (password === USER_PASSWORD) { // 일반 사용자 접속 (비밀번호 없이)
             setIsAuthenticated(true);
             setIsAdmin(false);
         } else {
@@ -140,6 +141,7 @@ function App() {
     };
 
     const handleUpdateShares = (id) => {
+        console.log("Sending shares to backend:", editingShares); // 디버깅 로그 추가
         fetch(`${API_URL}/expenses/${id}/shares`, {
             method: 'PUT',
             headers: {
@@ -148,11 +150,18 @@ function App() {
             },
             body: JSON.stringify({ shares: editingShares })
         })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            return response.json();
+        })
         .then(() => {
             setEditingExpenseId(null);
             setEditingShares({});
             fetchExpenses();
-        });
+        })
+        .catch(error => console.error("Error updating shares:", error));
     };
 
     const handleShareChange = (participantName, value) => {
@@ -178,7 +187,7 @@ function App() {
                         type="password" 
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
-                        placeholder="비밀번호 입력 (관리자는 'psel', 일반 참가자는 비워두세요)"
+                        placeholder="비밀번호 입력"
                     />
                     <button onClick={handleLogin}>접속</button>
                 </div>
