@@ -10,6 +10,10 @@ const PORT = 5001;
 app.use(cors());
 app.use(express.json());
 
+app.get('/', (req, res) => {
+    res.send('Trip Settlement Backend is running!');
+});
+
 const dbPath = path.join(__dirname, 'db.json');
 
 const ADMIN_PASSWORD = '0865'; // 관리자 비밀번호 (보안에 취약하니 실제 서비스에서는 환경 변수 사용 권장)
