@@ -1,1 +1,1 @@
-Feature: Update login passwords and fix share saving issue
+Fix: Backend server startup issue and improve db.json initialization

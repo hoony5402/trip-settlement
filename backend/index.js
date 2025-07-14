@@ -1,3 +1,4 @@
+
 const express = require('express');
 const cors = require('cors');
 const fs = require('fs');
@@ -38,12 +39,24 @@ const writeDb = (data) => {
 };
 
 // Initialize db.json if it doesn't exist or is empty/invalid
-if (!fs.existsSync(dbPath) || Object.keys(readDb()).length === 0) {
+// This block is moved to ensure it runs before any route handlers try to read the DB
+try {
+    const dbData = fs.readFileSync(dbPath);
+    const data = JSON.parse(dbData);
+    // Ensure all top-level properties exist
+    data.participants = data.participants || [];
+    data.expenses = data.expenses || [];
+    data.pendingExpenses = data.pendingExpenses || [];
+    writeDb(data); // Write back to ensure any missing properties are added
+} catch (error) {
+    console.error("db.json initialization error:", error);
+    // If file doesn't exist or is invalid, create initial structure
     writeDb({
         participants: [],
         expenses: [],
         pendingExpenses: []
     });
+    console.log("db.json initialized with default structure.");
 }
 
 // 관리자 권한 확인 미들웨어
@@ -165,4 +178,9 @@ app.delete('/api/expenses/:id', checkAdmin, (req, res) => {
 
 app.get('/', (req, res) => {
     res.send('Trip Settlement Backend is running!');
+});
+
+app.listen(PORT, () => {
+    console.log(`Server is running on http://localhost:${PORT}`);
+    console.log("Backend server started successfully."); // Added log
 });
