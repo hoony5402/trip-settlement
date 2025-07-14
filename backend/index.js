@@ -12,7 +12,7 @@ app.use(express.json());
 
 const dbPath = path.join(__dirname, 'db.json');
 
-const ADMIN_PASSWORD = 'psel'; // 관리자 비밀번호 (보안에 취약하니 실제 서비스에서는 환경 변수 사용 권장)
+const ADMIN_PASSWORD = '0865'; // 관리자 비밀번호 (보안에 취약하니 실제 서비스에서는 환경 변수 사용 권장)
 
 const readDb = () => {
     try {

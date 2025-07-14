@@ -1,1 +1,1 @@
-Fix: Backend server startup issue and improve db.json initialization
+Fix: Sync admin password in backend with frontend
